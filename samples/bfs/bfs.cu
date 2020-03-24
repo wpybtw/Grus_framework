@@ -6,6 +6,6 @@
 
 namespace bfs{
     int BFSSingle(){
-        
+        printf("BFS\n");
     }
 }
