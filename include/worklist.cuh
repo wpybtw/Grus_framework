@@ -9,12 +9,10 @@
 using namespace intrinsics;
 #define WARP_SIZE 32
 
-
 namespace mgg
 {
 namespace worklist
 {
-
 
 class Worklist
 {
@@ -86,7 +84,6 @@ public:
   __device__ __forceinline__ vtx_t size() const { return *count; }
   __device__ __forceinline__ void assign(vtx_t i, vtx_t t) const { data[i] = t; }
 };
-
 
 __global__ void worklist_reset(Worklist wl);
 

@@ -2,6 +2,8 @@
 #define __APP_CUH
 
 #include "common.cuh"
+#include "graph.cuh"
+#include "frontier.cuh"
 #include <sstream>
 #include <string>
 #include <gflags/gflags.h>
@@ -26,9 +28,9 @@ struct Skeleton
     int operator() (int argc, char **argv)
     {
         gflags::ParseCommandLineFlags(&argc, &argv, true);
-
-        Graph G;
-        G.Init(input);
+        // G.Init();
+        App::Single();
         return 0;
     }
-}
+};
+#endif

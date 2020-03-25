@@ -3,28 +3,29 @@
 
 // #include <chrono>
 // #include <cstdlib>
-// #include <cstring>
+#include <cstring>
 // #include <ctime>
-// #include <fstream>
-// #include <iostream>
+#include <fstream>
+#include <iostream>
 // #include <iterator>
 // #include <locale>
-// #include <math.h>
+#include <math.h>
 // #include <sstream>
 // #include <stdexcept>
-// #include <stdio.h>
-// #include <stdlib.h>
-// #include <string>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string>
+#include <limits>
 // #include <sys/stat.h>
 // #include <sys/types.h>
-// #include <vector>
+#include <vector>
 // #include <cuda.h>
 // #include <cuda_runtime.h>
 // #include <gflags/gflags.h>
 
 namespace mgg
 {
-namespace common
+namespace
 {
 #define BLOCK_SIZE 512
 
@@ -80,11 +81,8 @@ enum Memtype
 //   CC
 // };
 
-} // namespace common
+} // namespace
 } // namespace mgg
-
-
-
 
 // enum App
 // {

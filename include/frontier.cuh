@@ -29,9 +29,9 @@ private:
     // cudaStream_t &stream;
 
 public:
-    Frontier();
+    Frontier(){}
     ~Frontier() {}
-    void Init(vtx_t _numNode, float size_threshold = 1.0, bool _full = false, vtx_t _src = 0, int gpu_id = 0)
+    void Init(vtx_t _numNode, vtx_t _src = 0, int gpu_id = 0, float size_threshold = 1.0, bool _full = false)
     {
         numNode = _numNode;
         src = _src;

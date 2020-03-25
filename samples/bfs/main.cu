@@ -4,6 +4,7 @@
 #include "app.cuh"
 #include <gflags/gflags.h>
 
+bool BFSSingle();
 namespace bfs
 {
 struct App
@@ -12,8 +13,9 @@ struct App
 };
 } // namespace bfs
 
-int main(int argc, const char **argv)
+int main(int argc, char **argv)
 {
     Skeleton<bfs::App> app;
+    int exit = app(argc, argv);
     return 0;
 }

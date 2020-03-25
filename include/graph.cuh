@@ -20,6 +20,8 @@
 // using namespace grus;
 // using namespace frontier;
 
+DECLARE_string(input);
+
 namespace mgg
 {
 namespace graph
@@ -33,23 +35,26 @@ class Graph
 public:
   // ulong memRequest;
   // ulong memRequest_d;
+  // std::vector<Edge> edges;
+  // std::vector<weight_t> weights;
+
   string graphFilePath;
 
   bool hasZeroID;
   uint64_t numNode;
   uint64_t numEdge;
-  // std::vector<Edge> edges;
-  std::vector<weight_t> weights;
   uint64_t sizeEdgeTy;
 
   // graph
-  vtx_t *xadj, *vwgt, *adjncy, ;
+  vtx_t *xadj, *vwgt, *adjncy;
   vtx_t *xadj_d, *vwgt_d, *adjncy_d;
   weight_t *adjwgt, *adjwgt_d;
   uint *inDegree;
   uint *outDegree;
   bool weighted;
-  bool withWeight;
+  bool needWeight;
+
+  uint64_t mem_used = 0;
 
   void Cleanup();
 
@@ -72,7 +77,7 @@ public:
   void ReadGraphGRHead()
   {
     FILE *fpin;
-    bool readew;
+    // bool readew;
     fpin = gk_fopen(graphFilePath.data(), "r", "ReadGraphGR: Graph");
     size_t read;
     uint64_t x[4];
@@ -107,7 +112,7 @@ public:
   {
     // uint *vsize;
     FILE *fpin;
-    bool readew;
+    // bool readew;
     fpin = gk_fopen(graphFilePath.data(), "r", "ReadGraphGR: Graph");
     size_t read;
     uint64_t x[4];
@@ -129,13 +134,16 @@ public:
 
     H_ERR(cudaMallocManaged(&xadj, (num_Node + 1) * sizeof(vtx_t)));
     H_ERR(cudaMallocManaged(&adjncy, num_Edge * sizeof(vtx_t)));
-    um_used += (num_Node + 1) * sizeof(vtx_t) + num_Edge * sizeof(vtx_t);
+    mem_used += (num_Node + 1) * sizeof(vtx_t) + num_Edge * sizeof(vtx_t);
 
     adjwgt = nullptr;
-    H_ERR(cudaMallocManaged(&adjwgt, num_Edge * sizeof(weight_t)));
-    // um_used += num_Edge * sizeof(uint);
+    if (needWeight)
+    {
+      H_ERR(cudaMallocManaged(&adjwgt, num_Edge * sizeof(weight_t)));
+      mem_used += num_Edge * sizeof(uint);
+    }
     weighted = true;
-    if (!sizeEdgeTy)
+    if ((!sizeEdgeTy) && (needWeight))
     {
       // adjwgt = new uint[num_Edge];
       for (size_t i = 0; i < num_Edge; i++)
@@ -186,7 +194,7 @@ public:
     }
     uint maxD = std::distance(outDegree, std::max_element(outDegree, outDegree + num_Node));
     printf("%d has max out degree %d\n", maxD, outDegree[maxD]);
-    if (sizeEdgeTy)
+    if ((sizeEdgeTy) && needWeight)
     {
       if (num_Edge % 2)
         if (fseek(fpin, 4, SEEK_CUR) != 0) // skip
@@ -195,7 +203,7 @@ public:
       {
         read = fread(adjwgt, sizeof(uint), num_Edge,
                      fpin); // This is little-endian data
-        readew = true;
+        // readew = true;
         if (read < num_Edge)
           printf("Error: Partial read of edge data\n");
 
@@ -211,17 +219,19 @@ public:
     numEdge = num_Edge;
     gk_fclose(fpin);
   }
-  void Init(Input inp)
+  void Init(bool _needweight=false)
   {
-    this->input = inp;
-    this->graphFilePath = input.file;
-    this->weighted = false;
+    this->graphFilePath = FLAGS_input;
+    // this->weighted = FLAGS_weight||false;
     this->hasZeroID = false;
-    this->withWeight = false;
+    this->needWeight = _needweight;
     Load();
   }
 
-  void Load() { ReadGraphGR(); }
+  void Load()
+  {
+    ReadGraphGR();
+  }
 };
 } // namespace graph
 } // namespace mgg
