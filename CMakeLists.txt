@@ -10,14 +10,16 @@ set(CUDA_PATH "/usr/local/cuda")
 add_subdirectory(deps/gflags)
 include_directories(${PROJECT_BINARY_DIR}/deps/gflags/include)
 link_directories(${PROJECT_BINARY_DIR}/deps/gflags/lib)
-
+#set_target_properties(mgg PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 SET(CUDA_SEPARABLE_COMPILATION ON)
 set(BUILD_SHARED_LIBS OFF)
 
 ############## BUILD ##############
 set(EXTRA_LIBS gflags)
 
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_75,code=sm_75  -dc -std=c++11 -Xcompiler -fopenmp")
+#-Xcompiler -fopenmp
+
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_75,code=sm_75  -dc -std=c++11 ")
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   message("Debug mode")
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -G -Xcompiler   -ggdb  -lnvrt -Woverloaded-virtual ")

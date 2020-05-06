@@ -15,7 +15,8 @@ using namespace worklist;
 
 class Frontier
 {
-private:
+// private:
+public:
     vtx_t numNode;
     Worklist wl1, wl2;
     Worklist *wl_c, *wl_n;
@@ -29,7 +30,7 @@ private:
     // cudaStream_t &stream;
 
 public:
-    Frontier(){}
+    Frontier() {}
     ~Frontier() {}
     void Init(vtx_t _numNode, vtx_t _src = 0, int gpu_id = 0, float size_threshold = 1.0, bool _full = false)
     {
@@ -51,7 +52,10 @@ public:
         {
             // if ((gpu_id / FLAGS_ngpu <= src / numNode) && ((gpu_id + 1) / FLAGS_ngpu > src / numNode))
             if (gpu_id == 0)
-                wl_add_item(wl1, src, 0);
+            {
+                cout << "add src" << endl;
+                wl_add_item(*wl_c, src, 0);
+            }
         }
     }
     void Next()
@@ -71,7 +75,7 @@ public:
     }
     __host__ vtx_t get_work_size_h()
     {
-        wl_get_sz(wl_c);
+        return wl_get_sz(wl_c);
     }
     __device__ void add_work_item(vtx_t id)
     {
