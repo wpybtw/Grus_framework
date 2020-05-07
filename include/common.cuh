@@ -72,7 +72,7 @@ enum Memtype
   normal,
   um,
 };
-
+enum graphFmt { CSR, CSC };
 // enum class APP
 // {
 //   BFS,
