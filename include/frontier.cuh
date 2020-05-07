@@ -51,7 +51,7 @@ public:
         else
         {
             // if ((gpu_id / FLAGS_ngpu <= src / numNode) && ((gpu_id + 1) / FLAGS_ngpu > src / numNode))
-            if (gpu_id == 0)
+            // if (gpu_id == 0)
             {
                 cout << "add src" << endl;
                 wl_add_item(*wl_c, src, 0);

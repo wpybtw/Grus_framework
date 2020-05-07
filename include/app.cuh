@@ -20,7 +20,11 @@ DEFINE_int32(src, 0, "app src");
 // DEFINE_bool(one, false, "process one by one");
 // DEFINE_bool(s, false, "single job");
 // DEFINE_string(app, "bfs", "app name");
-
+DEFINE_bool(pf, false, "use UM prefetch");
+DEFINE_bool(ab, false, "use UM hint: AccessedBy");
+DEFINE_bool(rm, false, "use UM hint: ReadMostly");
+DEFINE_bool(pl, false, "use UM hint: PreferredLocation");
+DEFINE_bool(opt, true, "use opt UM policy");
 
 template<typename App>
 struct Skeleton
