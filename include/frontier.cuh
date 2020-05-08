@@ -72,6 +72,58 @@ public:
   __device__ vtx_t get_work_size() { return *wl_c->count; }
   __host__ vtx_t get_work_size_h() { return wl_c->get_sz(); }
   __device__ void add_work_item(vtx_t id) { wl_n->append(id); }
+  __host__ bool finish() { return get_work_size_h() == 0 ? true : false; }
+};
+template <> class Frontier<BITMAP> {
+  // private:
+public:
+  vtx_t numNode;
+  char *flag1, *flag2;
+  Worklist *wl_c, *wl_n;
+  vtx_t src;
+  vtx_t wl_sz = 1;
+  vtx_t *flag_sz;
+  float active_perct = 0;
+  char *finished_d, finished=false;
+  // cudaStream_t &stream;
+
+public:
+  Frontier() {}
+  ~Frontier() {}
+  void Init(vtx_t _numNode, vtx_t _src = 0, int gpu_id = 0,
+            float size_threshold = 1.0, bool _full = false) {
+    numNode = _numNode;
+    src = _src;
+    H_ERR(cudaSetDevice(gpu_id));
+    H_ERR(cudaMalloc(&flag1, numNode * sizeof(char)));
+    H_ERR(cudaMalloc(&flag2, numNode * sizeof(char)));
+    H_ERR(cudaMalloc(&finished_d, sizeof(char)));
+    H_ERR(cudaMemset(finished_d, 1, sizeof(char)));
+    // cudaMalloc(&flag_sz, sizeof(vtx_t));
+    H_ERR(cudaMemsetAsync(flag2, 0, numNode * sizeof(char), NULL));
+    if (_full) {
+      H_ERR(cudaMemsetAsync(flag1, 1, numNode * sizeof(char), NULL));
+    } else {
+      H_ERR(cudaMemsetAsync(flag1, 0, numNode * sizeof(char), NULL));
+      H_ERR(cudaMemsetAsync(&flag1[src], 1, sizeof(char), NULL));
+    }
+  }
+  void Next() {  // cudaStream_t &stream = NULL
+    // wl1.reset(); // flag2 active, flag1 dirty
+    H_ERR(cudaMemcpy(&finished, finished_d, sizeof(char),
+                     cudaMemcpyDeviceToHost));
+    H_ERR(cudaMemset(finished_d, 1, sizeof(char)));
+    std::swap(flag2, flag1);
+    if (!finished)
+      H_ERR(cudaMemsetAsync(flag2, 0,
+                            numNode * sizeof(char))); // flag1 active, flag2 0
+  }
+  __device__ vtx_t get_work_item(vtx_t id) { return wl_c->data[id]; }
+  __device__ vtx_t get_work_size() { return *wl_c->count; }
+  __host__ vtx_t get_work_size_h() { return wl_c->get_sz(); }
+  __device__ void add_work_item(vtx_t id) { wl_n->append(id); }
+  // __host__ bool finish() { return wl_c->get_sz(); }
+  __host__ bool finish() { return finished; }
 };
 template <> class Frontier<BDF_AUTO> {
   // private:
@@ -127,6 +179,7 @@ public:
   __device__ vtx_t get_work_size() { return *wl_c->count; }
   __host__ vtx_t get_work_size_h() { return wl_c->get_sz(); }
   __device__ void add_work_item(vtx_t id) { wl_n->append(id); }
+  __host__ bool finish() { return get_work_size_h() == 0 ? true : false; }
 };
 template <> class Frontier<WL> {
   // private:
@@ -140,6 +193,7 @@ public:
   vtx_t *flag_sz;
   float active_perct = 0;
   char *finished_d;
+
 public:
   Frontier() {}
   ~Frontier() {}
@@ -169,6 +223,7 @@ public:
   __device__ vtx_t get_work_size() { return *wl_c->count; }
   __host__ vtx_t get_work_size_h() { return wl_c->get_sz(); }
   __device__ void add_work_item(vtx_t id) { wl_n->append(id); }
+  __host__ bool finish() { return get_work_size_h() == 0 ? true : false; }
 };
 } // namespace frontier
 } // namespace mgg

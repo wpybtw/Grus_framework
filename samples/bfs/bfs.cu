@@ -40,6 +40,13 @@ struct generator {
     if (updated)
       flag[dst] = true;
   }
+  __forceinline__ __device__ void operator()(bool updated, char *flag,
+                                             vtx_t dst, char *finished) {
+    if (updated) {
+      flag[dst] = true;
+      *finished = false;
+    }
+  }
 };
 class job_t {
 public:
@@ -73,16 +80,16 @@ bool BFSSingle() {
   // G.Init(false);
   bfs::job_t job;
   job(G.numNode, FLAGS_src);
-  frontier::Frontier<BDF_AUTO> F; //_AUTO
+  frontier::Frontier<BDF_AUTO> F; // BDF  BDF_AUTO BITMAP
   F.Init(G.numNode, FLAGS_src, FLAGS_device, 1.0, false);
   G.Set_Mem_Policy(stream);
   cudaDeviceSynchronize();
   Timer t;
   t.Start();
-  kernel<graph_t<CSR>, frontier::Frontier<BDF_AUTO>, bfs::updater,
-         bfs::generator, bfs::job_t>
+  kernel<graph_t<CSR>, frontier::Frontier<BDF_AUTO>, bfs::updater, bfs::generator,
+         bfs::job_t>
       K;
-  while (F.get_work_size_h() != 0) {
+  while (!F.finish()) {
     // cout << "itr " << job.itr << " wl_sz " << F.wl_sz << endl;
     K(G, F, job);
     cudaDeviceSynchronize();
