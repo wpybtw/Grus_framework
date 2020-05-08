@@ -62,7 +62,7 @@ public:
     printf("Failed on gk_fopen()\n");
     return NULL;
   }
-  void ReadGraphGR(graph::graph_t<CSR> &G) {
+  void ReadGraphGR(graph_t<CSR> &G) {
     // uint *vsize;
     FILE *fpin;
     // bool readew;
@@ -161,7 +161,7 @@ public:
     G.numEdge = num_Edge;
     gk_fclose(fpin);
   }
-  void Load(graph::graph_t<CSR> &G, bool _needweight = true) {
+  void Load(graph_t<CSR> &G, bool _needweight = true) {
     this->graphFilePath = FLAGS_input;
     // this->weighted = FLAGS_weight||false;
     this->hasZeroID = false;

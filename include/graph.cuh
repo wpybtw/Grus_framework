@@ -28,12 +28,10 @@ DECLARE_bool(pl);
 DECLARE_bool(opt);
 DECLARE_int32(device);
 namespace mgg {
-namespace graph {
 
 // template <typename T> void PrintResults(T *results, uint n);
 
-
-template <graphFmt fmt> struct graph_t {};
+template <graphFmt fmt> class graph_t {};
 
 template <> class graph_t<CSR> {
 public:
@@ -150,6 +148,95 @@ public:
     }
   }
 };
-} // namespace graph
+
+/* Modified from
+ * https://github.com/scipy/scipy/blob/master/scipy/sparse/sparsetools/csr.h
+ * Compute B = A for CSR matrix A, CSC matrix B.
+ *
+ * Also, with the appropriate arguments can also be used to:
+ *   - compute B = A^t for CSR matrix A, CSR matrix B
+ *   - compute B = A^t for CSC matrix A, CSC matrix B
+ *   - convert CSC->CSR
+ *
+ * Input Arguments:
+ *   I  n_row         - number of rows in A
+ *   I  n_col         - number of columns in A
+ *   I  Ap[n_row+1]   - row pointer
+ *   I  Aj[nnz(A)]    - column indices
+ *   T  Ax[nnz(A)]    - nonzeros
+ *
+ * Output Arguments:
+ *   I  Bp[n_col+1] - column pointer
+ *   I  Bj[nnz(A)]  - row indices
+ *   T  Bx[nnz(A)]  - nonzeros
+ *
+ * Note:
+ *   Output arrays Bp, Bj, Bx must be preallocated
+ *
+ * Note:
+ *   Input:  column indices *are not* assumed to be in sorted order
+ *   Output: row indices *will be* in sorted order
+ *
+ *   Complexity: Linear.  Specifically O(nnz(A) + max(n_row,n_col))
+ *
+ */
+template <class I, class T>
+void csr_tocsc(const I n_row, const I n_col, const I Ap[], const I Aj[],
+               const T Ax[], I Bp[], I Bi[], T Bx[], bool weighted) {
+  const I nnz = Ap[n_row];
+  // compute number of non-zero entries per column of A
+  std::fill(Bp, Bp + n_col, 0);
+  for (I n = 0; n < nnz; n++) {
+    Bp[Aj[n]]++;
+  }
+  // cumsum the nnz per column to get Bp[]
+  for (I col = 0, cumsum = 0; col < n_col; col++) {
+    I temp = Bp[col];
+    Bp[col] = cumsum;
+    cumsum += temp;
+  }
+  Bp[n_col] = nnz;
+  for (I row = 0; row < n_row; row++) {
+    for (I jj = Ap[row]; jj < Ap[row + 1]; jj++) {
+      I col = Aj[jj];
+      I dest = Bp[col];
+      Bi[dest] = row;
+      // Bx[dest] = Ax[jj];
+      Bp[col]++;
+    }
+  }
+  for (I col = 0, last = 0; col <= n_col; col++) {
+    I temp = Bp[col];
+    Bp[col] = last;
+    last = temp;
+  }
+}
+template <> class graph_t<CSC> {
+public:
+  bool hasZeroID;
+  uint64_t numNode;
+  uint64_t numEdge;
+  vtx_t *xadj, *vwgt, *adjncy;
+  vtx_t *xadj_d, *vwgt_d, *adjncy_d;
+  weight_t *adjwgt, *adjwgt_d;
+  bool weighted;
+  bool needWeight;
+  graph_t() {}
+  ~graph_t() {}
+  void CSR2CSC(graph_t<CSR> G) {
+    weighted = G.weighted;
+    needWeight = G.needWeight;
+    numNode = G.numNode;
+    numEdge = G.numEdge;
+    H_ERR(cudaMallocManaged(&xadj, (numNode + 1) * sizeof(vtx_t)));
+    H_ERR(cudaMallocManaged(&adjncy, numEdge * sizeof(vtx_t)));
+    if (needWeight)
+      H_ERR(cudaMallocManaged(&adjwgt, numEdge * sizeof(weight_t)));
+    LOG("transferring CSR to CSC\n");
+    csr_tocsc<vtx_t, weight_t>(numNode, numNode, G.xadj, G.adjncy, G.adjwgt,
+                               xadj, adjncy, adjwgt, needWeight);
+  }
+};
+
 } // namespace mgg
 #endif

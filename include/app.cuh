@@ -17,6 +17,7 @@ DEFINE_int32(device, 0, "GPU ID");
 DEFINE_string(input, "", "graph file");
 DEFINE_int32(src, 0, "app src");
 
+DEFINE_double(wl_th, 0.5, "wl switch threshold");
 // DEFINE_bool(one, false, "process one by one");
 // DEFINE_bool(s, false, "single job");
 // DEFINE_string(app, "bfs", "app name");

@@ -73,6 +73,7 @@ enum Memtype
   um,
 };
 enum graphFmt { CSR, CSC };
+enum frontierType { BDF_AUTO, BDF, WL, BITMAP };
 // enum class APP
 // {
 //   BFS,
