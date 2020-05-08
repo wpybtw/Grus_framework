@@ -35,10 +35,10 @@ struct generator {
     if (updated)
       wl.append(dst);
   }
-  __forceinline__ __device__ void operator()(bool updated,
-                                             char *flag, vtx_t dst) {
+  __forceinline__ __device__ void operator()(bool updated, char *flag,
+                                             vtx_t dst) {
     if (updated)
-      flag[dst]=true;
+      flag[dst] = true;
   }
 };
 class job_t {
@@ -66,21 +66,21 @@ bool BFSSingle() {
   graph_t<CSR> G;
   graph_loader loader;
   loader.Load(G, false);
-  // graph_t<CSC> G2; 
+  // graph_t<CSC> G2;
   // G2.CSR2CSC(G);
   LOG("BFS single\n");
   cudaStream_t stream;
   // G.Init(false);
   bfs::job_t job;
   job(G.numNode, FLAGS_src);
-  frontier::Frontier<BDF> F; //_AUTO
+  frontier::Frontier<BDF_AUTO> F; //_AUTO
   F.Init(G.numNode, FLAGS_src, FLAGS_device, 1.0, false);
   G.Set_Mem_Policy(stream);
   cudaDeviceSynchronize();
   Timer t;
   t.Start();
-  kernel<graph_t<CSR>, frontier::Frontier<BDF>, bfs::updater, bfs::generator,
-         bfs::job_t>
+  kernel<graph_t<CSR>, frontier::Frontier<BDF_AUTO>, bfs::updater,
+         bfs::generator, bfs::job_t>
       K;
   while (F.get_work_size_h() != 0) {
     // cout << "itr " << job.itr << " wl_sz " << F.wl_sz << endl;
