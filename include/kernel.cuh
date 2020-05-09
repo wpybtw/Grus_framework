@@ -76,7 +76,8 @@ __global__ void push_kernel(graph_t G, char *flag1, char *flag2, job_t job) {
 }
 template <typename graph_t, typename updater_t, typename generator_t,
           typename job_t>
-__global__ void push_kernel(graph_t G, char *flag1, char *flag2, char *finished, job_t job) {
+__global__ void push_kernel(graph_t G, char *flag1, char *flag2, char *finished,
+                            job_t job) {
   int tid = TID_1D;
   vtx_t id, level, laneid, tmpid, wpid;
   wpid = tid / 32;
@@ -108,7 +109,7 @@ public:
   void operator()(graph_t G, frontier::Frontier<WL> F, job_t job) {
     push_kernel<
         graph_t, updater_t, generator_t,
-        job_t><<<F.get_work_size_h() * 32 / BLOCK_SIZE + 1, BLOCK_SIZE>>>(
+        job_t><<<F.get_work_size_h() / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
         G, *F.wl_c, *F.wl_n, job);
   }
 };
@@ -119,7 +120,7 @@ public:
   void operator()(graph_t G, frontier::Frontier<BDF> F, job_t job) {
     push_kernel<
         graph_t, updater_t, generator_t,
-        job_t><<<F.get_work_size_h() * 32 / BLOCK_SIZE + 1, BLOCK_SIZE>>>(
+        job_t><<<F.get_work_size_h() / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
         G, *F.wl_c, F.flag2, job);
   }
 };
@@ -130,7 +131,7 @@ class kernel<graph_t, frontier::Frontier<BITMAP>, updater_t, generator_t,
 public:
   void operator()(graph_t G, frontier::Frontier<BITMAP> F, job_t job) {
     push_kernel<graph_t, updater_t, generator_t,
-                job_t><<<F.numNode * 32 / BLOCK_SIZE + 1, BLOCK_SIZE>>>(
+                job_t><<<F.numNode / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
         G, F.flag1, F.flag2, F.finished_d, job);
   }
 };
@@ -144,11 +145,11 @@ public:
     if (F.current_wl)
       push_kernel<
           graph_t, updater_t, generator_t,
-          job_t><<<F.get_work_size_h() * 32 / BLOCK_SIZE + 1, BLOCK_SIZE>>>(
+          job_t><<<F.get_work_size_h() / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
           G, *F.wl_c, F.flag2, job);
     else
       push_kernel<graph_t, updater_t, generator_t,
-                  job_t><<<F.numNode * 32 / BLOCK_SIZE + 1, BLOCK_SIZE>>>(
+                  job_t><<<F.numNode / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
           G, F.flag1, F.flag2, job);
   }
 };
