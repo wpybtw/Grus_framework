@@ -12,38 +12,38 @@ DECLARE_int32(device);
 DECLARE_string(input);
 DECLARE_int32(src);
 
-namespace bfs {
+namespace sssp {
 
-__global__ void BFSInit(uint *label, int nnodes, vtx_t source) {
+__global__ void SSSPInit(uint *label, int nnodes, vtx_t source) {
   int tid = TID_1D;
   if (tid < nnodes) {
     label[tid] = tid == source ? 0 : INFINIT;
   }
 }
-// template<typename graph_t>
 class job_t {
 public:
   uint src;
   uint *label;
   uint itr = 0;
   vtx_t num_Node;
-  weight_t *adjwgt=nullptr;
-  void operator()(vtx_t _num_Node, uint _src) {
+  weight_t *adjwgt = nullptr;
+  void operator()(vtx_t _num_Node, uint _src, weight_t *_adjwgt) {
     num_Node = _num_Node;
     src = _src;
+    adjwgt = _adjwgt;
     init();
   }
   void init() {
     H_ERR(cudaMalloc(&label, num_Node * sizeof(uint)));
-    BFSInit<<<num_Node / BLOCK_SIZE + 1, BLOCK_SIZE>>>(label, num_Node, src);
+    SSSPInit<<<num_Node / BLOCK_SIZE + 1, BLOCK_SIZE>>>(label, num_Node, src);
   }
 };
 
 struct updater {
   __forceinline__ __device__ bool operator()(vtx_t src, vtx_t dst,
                                              vtx_t edge_id, job_t job) {
-    if (job.label[dst] > job.itr + 1) {
-      job.label[dst] = job.itr + 1;
+    if (job.label[dst] > job.label[src] + job.adjwgt[edge_id]) {
+      job.label[dst] = job.label[src] + job.adjwgt[edge_id];
       return true;
     }
     return false;
@@ -69,14 +69,14 @@ struct generator {
   }
 };
 
-} // namespace bfs
+} // namespace sssp
 
-bool BFSSingle() {
+bool SSSPSingle() {
   cudaSetDevice(FLAGS_device);
   H_ERR(cudaDeviceReset());
-  graph_t<CSR> G;
+  graph_t<CSR> G(true);
   graph_loader loader;
-  loader.Load(G, false);
+  loader.Load(G, true);
   // LOG("make g1 chunks\n");
   // G.make_chunks(4);
   // for (size_t i = 0; i < 4; i++) {
@@ -89,20 +89,20 @@ bool BFSSingle() {
   //   cout << "G2 " << i << G2.chunks[i] << endl;
   // }
 
-  LOG("BFS single\n");
+  LOG("SSSP single\n");
   cudaStream_t stream;
   cudaStreamCreate(&stream);
-  // G.Init(false); 
-  bfs::job_t job;
-  job(G.numNode, FLAGS_src);
+  // G.Init(false);
+  sssp::job_t job;
+  job(G.numNode, FLAGS_src, G.adjwgt);
   frontier::Frontier<BDF_AUTO> F; // BDF  BDF_AUTO BITMAP
   F.Init(G.numNode, FLAGS_src, FLAGS_device, 1.0, false);
   G.Set_Mem_Policy(&stream); // stream
   cudaDeviceSynchronize();
   Timer t;
   t.Start();
-  kernel<graph_t<CSR>, frontier::Frontier<BDF_AUTO>, bfs::updater,
-         bfs::generator, bfs::job_t>
+  kernel<graph_t<CSR>, frontier::Frontier<BDF_AUTO>, sssp::updater,
+         sssp::generator, sssp::job_t>
       K;
   while (!F.finish()) {
     // cout << "itr " << job.itr << " wl_sz " << F.wl_sz << endl;

@@ -41,9 +41,13 @@ add_executable(bfs
                 src/worklist.cu
                samples/bfs/bfs.cu
 					     samples/bfs/main.cu)
-
 target_link_libraries(bfs ${EXTRA_LIBS})
 
+add_executable(sssp 
+                src/worklist.cu
+               samples/sssp/sssp.cu
+					     samples/sssp/main.cu)
+target_link_libraries(sssp ${EXTRA_LIBS})
 
 #add_executable(grus
 #    src/app.cu

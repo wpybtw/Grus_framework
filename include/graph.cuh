@@ -34,28 +34,50 @@ template <graphFmt fmt> class graph_chunk {
 public:
   uint64_t numNode;
   uint64_t numEdge;
-  vtx_t *xadj, *vwgt, *adjncy;
-  vtx_t *xadj_d, *vwgt_d, *adjncy_d;
-  weight_t *adjwgt, *adjwgt_d;
+  vtx_t *xadj, *vwgt, *adjncy, *adjncy_global;
+  // vtx_t *xadj_d, *vwgt_d, *adjncy_d;
+  weight_t *adjwgt, *adjwgt_global;
   uint64_t node_in_chunk;
   uint64_t edge_in_chunk;
-  vtx_t start, end;
+  vtx_t start_v, end_v, start_e, end_e;
   uint device_id;
   bool weighted = false;
 
   graph_chunk(uint64_t _numNode, uint64_t _numEdge, uint64_t _node_in_chunk,
-              uint64_t _edge_in_chunk, uint _device_id,
-              bool _weighted = false) {
+              uint64_t _edge_in_chunk, vtx_t _start_v, uint _device_id,
+              vtx_t *_adjncy_global, weight_t *adjwgt_global = nullptr) {
     numNode = _numNode;
     numEdge = _numEdge;
     node_in_chunk = _node_in_chunk;
     edge_in_chunk = _edge_in_chunk;
+    start_v = _start_v;
+    end_v = start_v + _node_in_chunk;
+    start_e = xadj[start_v];
+    end_e = start_e + _edge_in_chunk;
+    adjncy_global = _adjncy_global;
     device_id = _device_id;
-    weighted = _weighted;
-    H_ERR(cudaMallocManaged(&xadj, (node_in_chunk + 1) * sizeof(vtx_t)));
+    if (adjwgt_global != nullptr)
+      weighted = true;
+    H_ERR(cudaMallocManaged(&xadj, (numNode + 1) *
+                                       sizeof(vtx_t))); // change to all xadj
     H_ERR(cudaMallocManaged(&adjncy, (edge_in_chunk + 1) * sizeof(vtx_t)));
     if (weighted)
       H_ERR(cudaMallocManaged(&adjwgt, (edge_in_chunk + 1) * sizeof(weight_t)));
+  }
+  __forceinline__ __device__ vtx_t access_edge(vtx_t src, vtx_t offset) {
+    if ((start_v <= src) && (src <= end_v)) //local
+      return adjncy[xadj[src] + offset - start_e];
+    else
+      return adjncy_global[xadj[src] + offset];
+  }
+  __forceinline__ __device__ vtx_t access_weight(vtx_t src, vtx_t offset) {
+    if ((start_v <= src) && (src <= end_v))
+      return adjwgt[xadj[src] + offset - start_e];
+    else
+      return adjwgt_global[xadj[src] + offset];
+  }
+  __forceinline__ __device__ vtx_t get_degree(vtx_t id){
+    return xadj[id + 1] - xadj[id];
   }
 };
 template <graphFmt fmt>
@@ -79,7 +101,7 @@ public:
   // graph
   vtx_t *xadj, *vwgt, *adjncy;
   vtx_t *xadj_d, *vwgt_d, *adjncy_d;
-  weight_t *adjwgt, *adjwgt_d;
+  weight_t *adjwgt = nullptr, *adjwgt_d;
   uint *inDegree;
   uint *outDegree;
   bool weighted;
@@ -90,12 +112,13 @@ public:
   void make_chunks(int num_gpu) {
     vtx_t num_vtx_per_chunk = numNode / num_gpu;
     for (size_t i = 0; i < num_gpu - 1; i++) {
-      chunks.push_back(graph_chunk<fmt>(numNode, numEdge, num_vtx_per_chunk + 1,
-                                        xadj[(i + 1) * num_vtx_per_chunk] -
-                                            xadj[i * num_vtx_per_chunk],
-                                        i, needWeight));
-      memcpy(chunks[i].xadj, &xadj[i * num_vtx_per_chunk],
-             num_vtx_per_chunk + 1);
+      chunks.push_back(graph_chunk<fmt>(
+          numNode, numEdge, num_vtx_per_chunk + 1,
+          xadj[(i + 1) * num_vtx_per_chunk] - xadj[i * num_vtx_per_chunk],
+          i * num_vtx_per_chunk, i, adjncy, adjwgt));
+      // memcpy(chunks[i].xadj, &xadj[i * num_vtx_per_chunk],
+      //        num_vtx_per_chunk + 1);
+      memcpy(chunks[i].xadj, xadj, numNode + 1);
       memcpy(chunks[i].adjncy, &adjncy[xadj[i * num_vtx_per_chunk]],
              chunks[i].edge_in_chunk);
       if (needWeight)
@@ -104,10 +127,12 @@ public:
     }
     chunks.push_back(graph_chunk<fmt>(
         numNode, numEdge, num_vtx_per_chunk + numNode % num_gpu + 1,
-        xadj[numNode] - xadj[(num_gpu - 1) * num_vtx_per_chunk], num_gpu - 1,
-        needWeight));
-    memcpy(chunks[num_gpu - 1].xadj, &xadj[(num_gpu - 1) * num_vtx_per_chunk],
-           chunks[num_gpu - 1].node_in_chunk);
+        xadj[numNode] - xadj[(num_gpu - 1) * num_vtx_per_chunk],
+        (num_gpu - 1) * num_vtx_per_chunk, num_gpu - 1, adjncy, adjwgt));
+    // memcpy(chunks[num_gpu - 1].xadj, &xadj[(num_gpu - 1) *
+    // num_vtx_per_chunk],
+    //        chunks[num_gpu - 1].node_in_chunk+1);
+    memcpy(chunks[num_gpu - 1].xadj, xadj, numNode + 1);
     memcpy(chunks[num_gpu - 1].adjncy,
            &adjncy[xadj[(num_gpu - 1) * num_vtx_per_chunk]],
            chunks[num_gpu - 1].edge_in_chunk);
