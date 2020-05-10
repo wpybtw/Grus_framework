@@ -6,10 +6,10 @@
 #include "timer.cuh"
 // #include "job.cuh"
 #include "print.cuh"
-
 #include <cooperative_groups.h>
 #include <cuda_profiler_api.h>
 #include <cuda_runtime.h>
+#include <iostream>
 #include <nvrtc.h>
 
 #include <algorithm>
@@ -29,11 +29,49 @@ DECLARE_bool(opt);
 DECLARE_int32(device);
 namespace mgg {
 
-// template <typename T> void PrintResults(T *results, uint n);
+template <typename T> void PrintResults(T *results, uint n);
+template <graphFmt fmt> class graph_chunk {
+public:
+  uint64_t numNode;
+  uint64_t numEdge;
+  vtx_t *xadj, *vwgt, *adjncy;
+  vtx_t *xadj_d, *vwgt_d, *adjncy_d;
+  weight_t *adjwgt, *adjwgt_d;
+  uint64_t node_in_chunk;
+  uint64_t edge_in_chunk;
+  vtx_t start, end;
+  uint device_id;
+  bool weighted = false;
 
-template <graphFmt fmt> class graph_t {};
-
-template <> class graph_t<CSR> {
+  graph_chunk(uint64_t _numNode, uint64_t _numEdge, uint64_t _node_in_chunk,
+              uint64_t _edge_in_chunk, uint _device_id,
+              bool _weighted = false) {
+    numNode = _numNode;
+    numEdge = _numEdge;
+    node_in_chunk = _node_in_chunk;
+    edge_in_chunk = _edge_in_chunk;
+    device_id = _device_id;
+    weighted = _weighted;
+    H_ERR(cudaMallocManaged(&xadj, (node_in_chunk + 1) * sizeof(vtx_t)));
+    H_ERR(cudaMallocManaged(&adjncy, (edge_in_chunk + 1) * sizeof(vtx_t)));
+    if (weighted)
+      H_ERR(cudaMallocManaged(&adjwgt, (edge_in_chunk + 1) * sizeof(weight_t)));
+  }
+};
+template <graphFmt fmt>
+std::ostream &operator<<(std::ostream &output, graph_chunk<fmt> &chunk) {
+  output << "numNode: \t" << chunk.node_in_chunk << " numEdge: \t"
+         << chunk.edge_in_chunk << endl;
+  // output << "xadj: \t" << endl;
+  // print::PrintResults(chunk.xadj, 10);
+  // output << "adjncy: \t" << endl;
+  // print::PrintResults(chunk.adjncy, 10);
+  // output << "adjwgt: \t" << endl;
+  // if (chunk.weighted)
+  //   print::PrintResults(chunk.adjwgt, 10);
+  return output;
+}
+template <graphFmt fmt> class graph_base {
 public:
   bool hasZeroID;
   uint64_t numNode;
@@ -46,50 +84,63 @@ public:
   uint *outDegree;
   bool weighted;
   bool needWeight;
-
   uint64_t mem_used = 0;
+  vector<graph_chunk<fmt>> chunks;
 
-  graph_t(bool _needweight = false) {
-    this->hasZeroID = false;
-    this->needWeight = _needweight;
-    // H_ERR(cudaMallocManaged(&this->xadj, (num_Node + 1) * sizeof(vtx_t)));
-    // H_ERR(cudaMallocManaged(&this->adjncy, num_Edge * sizeof(vtx_t)));
-    // if (_needweight)
-    //   H_ERR(cudaMallocManaged(&G.adjwgt, num_Edge * sizeof(weight_t)));
+  void make_chunks(int num_gpu) {
+    vtx_t num_vtx_per_chunk = numNode / num_gpu;
+    for (size_t i = 0; i < num_gpu - 1; i++) {
+      chunks.push_back(graph_chunk<fmt>(numNode, numEdge, num_vtx_per_chunk + 1,
+                                        xadj[(i + 1) * num_vtx_per_chunk] -
+                                            xadj[i * num_vtx_per_chunk],
+                                        i, needWeight));
+      memcpy(chunks[i].xadj, &xadj[i * num_vtx_per_chunk],
+             num_vtx_per_chunk + 1);
+      memcpy(chunks[i].adjncy, &adjncy[xadj[i * num_vtx_per_chunk]],
+             chunks[i].edge_in_chunk);
+      if (needWeight)
+        memcpy(chunks[i].adjwgt, &adjwgt[xadj[i * num_vtx_per_chunk]],
+               chunks[i].edge_in_chunk);
+    }
+    chunks.push_back(graph_chunk<fmt>(
+        numNode, numEdge, num_vtx_per_chunk + numNode % num_gpu + 1,
+        xadj[numNode] - xadj[(num_gpu - 1) * num_vtx_per_chunk], num_gpu - 1,
+        needWeight));
+    memcpy(chunks[num_gpu - 1].xadj, &xadj[(num_gpu - 1) * num_vtx_per_chunk],
+           chunks[num_gpu - 1].node_in_chunk);
+    memcpy(chunks[num_gpu - 1].adjncy,
+           &adjncy[xadj[(num_gpu - 1) * num_vtx_per_chunk]],
+           chunks[num_gpu - 1].edge_in_chunk);
+    if (needWeight)
+      memcpy(chunks[num_gpu - 1].adjwgt,
+             &adjwgt[xadj[(num_gpu - 1) * num_vtx_per_chunk]],
+             chunks[num_gpu - 1].edge_in_chunk);
   }
-  ~graph_t() {
-    // if (xadj != nullptr)
-    //   H_ERR(cudaFree(xadj));
-    // if (adjncy != nullptr)
-    //   H_ERR(cudaFree(adjncy));
-    // if (adjwgt != nullptr)
-    //   H_ERR(cudaFree(adjwgt));
-  }
-  void Set_Mem_Policy(cudaStream_t stream) { //&
+  void Set_Mem_Policy(cudaStream_t *stream = NULL) { //& =NULL
     size_t avail, total;
     cudaMemGetInfo(&avail, &total);
     if (FLAGS_opt) {
       LOG("using opt\n");
       H_ERR(cudaMemPrefetchAsync(xadj_d, (numNode + 1) * sizeof(vtx_t),
-                                 FLAGS_device, stream));
+                                 FLAGS_device, *stream));
       if (mem_used < avail) {
         H_ERR(cudaMemPrefetchAsync(adjncy_d, numEdge * sizeof(vtx_t),
-                                   FLAGS_device, stream));
+                                   FLAGS_device, *stream));
         if (needWeight)
           H_ERR(cudaMemPrefetchAsync(adjwgt_d, numEdge * sizeof(weight_t),
-                                     FLAGS_device, stream));
+                                     FLAGS_device, *stream));
       } else {
         if (needWeight) {
           H_ERR(cudaMemPrefetchAsync(
               adjncy_d, (avail - (numNode + 1) * sizeof(vtx_t)) / 2,
-              FLAGS_device, stream));
+              FLAGS_device, *stream));
           H_ERR(cudaMemPrefetchAsync(
               adjwgt_d, (avail - (numNode + 1) * sizeof(vtx_t)) / 2,
-              FLAGS_device, stream));
+              FLAGS_device, *stream));
         } else
           H_ERR(cudaMemPrefetchAsync(adjncy_d,
                                      avail - (numNode + 1) * sizeof(vtx_t),
-                                     FLAGS_device, stream));
+                                     FLAGS_device, *stream));
       }
       if (mem_used > avail) //
       {
@@ -105,12 +156,12 @@ public:
       if (FLAGS_pf) {
         LOG("pfing\n");
         H_ERR(cudaMemPrefetchAsync(xadj_d, (numNode + 1) * sizeof(vtx_t),
-                                   FLAGS_device, stream));
+                                   FLAGS_device, *stream));
         H_ERR(cudaMemPrefetchAsync(adjncy_d, numEdge * sizeof(vtx_t),
-                                   FLAGS_device, stream));
+                                   FLAGS_device, *stream));
         if (needWeight)
           H_ERR(cudaMemPrefetchAsync(adjwgt_d, numEdge * sizeof(weight_t),
-                                     FLAGS_device, stream));
+                                     FLAGS_device, *stream));
       }
       if (FLAGS_ab) //
       {
@@ -148,38 +199,26 @@ public:
     }
   }
 };
+template <graphFmt fmt> class graph_t : public graph_base<fmt> {};
+template <> class graph_t<CSR> : public graph_base<CSR> {
+public:
+  graph_t(bool _needweight = false) {
+    this->hasZeroID = false;
+    this->needWeight = _needweight;
+  }
+  ~graph_t() {
+    // if (xadj != nullptr)
+    //   H_ERR(cudaFree(xadj));
+    // if (adjncy != nullptr)
+    //   H_ERR(cudaFree(adjncy));
+    // if (adjwgt != nullptr)
+    //   H_ERR(cudaFree(adjwgt));
+  }
+};
 
 /* Modified from
  * https://github.com/scipy/scipy/blob/master/scipy/sparse/sparsetools/csr.h
- * Compute B = A for CSR matrix A, CSC matrix B.
- *
- * Also, with the appropriate arguments can also be used to:
- *   - compute B = A^t for CSR matrix A, CSR matrix B
- *   - compute B = A^t for CSC matrix A, CSC matrix B
- *   - convert CSC->CSR
- *
- * Input Arguments:
- *   I  n_row         - number of rows in A
- *   I  n_col         - number of columns in A
- *   I  Ap[n_row+1]   - row pointer
- *   I  Aj[nnz(A)]    - column indices
- *   T  Ax[nnz(A)]    - nonzeros
- *
- * Output Arguments:
- *   I  Bp[n_col+1] - column pointer
- *   I  Bj[nnz(A)]  - row indices
- *   T  Bx[nnz(A)]  - nonzeros
- *
- * Note:
- *   Output arrays Bp, Bj, Bx must be preallocated
- *
- * Note:
- *   Input:  column indices *are not* assumed to be in sorted order
- *   Output: row indices *will be* in sorted order
- *
- *   Complexity: Linear.  Specifically O(nnz(A) + max(n_row,n_col))
- *
- */
+ * Compute B = A for CSR matrix A, CSC matrix B. */
 template <class I, class T>
 void csr_tocsc(const I n_row, const I n_col, const I Ap[], const I Aj[],
                const T Ax[], I Bp[], I Bi[], T Bx[], bool weighted) {
@@ -211,16 +250,8 @@ void csr_tocsc(const I n_row, const I n_col, const I Ap[], const I Aj[],
     last = temp;
   }
 }
-template <> class graph_t<CSC> {
+template <> class graph_t<CSC> : public graph_base<CSC> {
 public:
-  bool hasZeroID;
-  uint64_t numNode;
-  uint64_t numEdge;
-  vtx_t *xadj, *vwgt, *adjncy;
-  vtx_t *xadj_d, *vwgt_d, *adjncy_d;
-  weight_t *adjwgt, *adjwgt_d;
-  bool weighted;
-  bool needWeight;
   graph_t() {}
   ~graph_t() {}
   void CSR2CSC(graph_t<CSR> G) {

@@ -22,11 +22,11 @@ set(EXTRA_LIBS gflags)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_75,code=sm_75  -dc -std=c++11 ")
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   message("Debug mode")
-  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -G -Xcompiler   -ggdb  -lnvrt -Woverloaded-virtual ")
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -G -Xcompiler   -ggdb  -lnvrt  ")
 else()
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS}  -O3 -Xcompiler  -DNDEBUG  ")
 endif()
-
+#-Woverloaded-virtual
 
 set(CUDA_VERBOSE_BUILD ON)
 

@@ -73,21 +73,32 @@ bool BFSSingle() {
   graph_t<CSR> G;
   graph_loader loader;
   loader.Load(G, false);
+  // LOG("make g1 chunks\n");
+  // G.make_chunks(4);
+  // for (size_t i = 0; i < 4; i++) {
+  //   cout << "G " << i << G.chunks[i] << endl;
+  // }
   // graph_t<CSC> G2;
   // G2.CSR2CSC(G);
+  // G2.make_chunks(4);
+  // for (size_t i = 0; i < 4; i++) {
+  //   cout << "G2 " << i << G2.chunks[i] << endl;
+  // }
+
   LOG("BFS single\n");
   cudaStream_t stream;
+  cudaStreamCreate(&stream);
   // G.Init(false);
   bfs::job_t job;
   job(G.numNode, FLAGS_src);
   frontier::Frontier<BDF_AUTO> F; // BDF  BDF_AUTO BITMAP
   F.Init(G.numNode, FLAGS_src, FLAGS_device, 1.0, false);
-  G.Set_Mem_Policy(stream);
+  G.Set_Mem_Policy(&stream); //stream
   cudaDeviceSynchronize();
   Timer t;
   t.Start();
-  kernel<graph_t<CSR>, frontier::Frontier<BDF_AUTO>, bfs::updater, bfs::generator,
-         bfs::job_t>
+  kernel<graph_t<CSR>, frontier::Frontier<BDF_AUTO>, bfs::updater,
+         bfs::generator, bfs::job_t>
       K;
   while (!F.finish()) {
     // cout << "itr " << job.itr << " wl_sz " << F.wl_sz << endl;
