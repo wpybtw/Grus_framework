@@ -65,7 +65,7 @@ public:
   void ReadGraphGR(graph_t<CSR> &G) {
     // uint *vsize;
     FILE *fpin;
-    // bool readew;
+    bool readew;
     fpin = gk_fopen(graphFilePath.data(), "r", "ReadGraphGR: Graph");
     size_t read;
     uint64_t x[4];
@@ -87,21 +87,17 @@ public:
     H_ERR(cudaMallocManaged(&G.xadj, (num_Node + 1) * sizeof(vtx_t)));
     H_ERR(cudaMallocManaged(&G.adjncy, num_Edge * sizeof(vtx_t)));
     mem_used += (num_Node + 1) * sizeof(vtx_t) + num_Edge * sizeof(vtx_t);
-    // G.xadj_d = G.xadj;
-    // G.adjncy_d = G.adjncy;
-    G.adjwgt = nullptr;
-    if (needWeight) {
-      H_ERR(cudaMallocManaged(&G.adjwgt, num_Edge * sizeof(weight_t)));
-      mem_used += num_Edge * sizeof(uint);
-      // G.adjwgt_d = G.adjwgt;
-    }
-    G.weighted = true;
-    if ((!sizeEdgeTy) && (needWeight)) {
+
+    // adjwgt = nullptr;
+    H_ERR(cudaMallocManaged(&G.adjwgt, num_Edge * sizeof(weight_t)));
+    // um_used += num_Edge * sizeof(uint);
+    weighted = true;
+    if (!sizeEdgeTy) {
       // adjwgt = new uint[num_Edge];
       for (size_t i = 0; i < num_Edge; i++) {
         G.adjwgt[i] = 1;
       }
-      G.weighted = false;
+      weighted = false;
     }
     G.outDegree = new uint[num_Node];
     assert(G.xadj != NULL);
@@ -139,14 +135,14 @@ public:
     uint maxD = std::distance(
         G.outDegree, std::max_element(G.outDegree, G.outDegree + num_Node));
     printf("%d has max out degree %d\n", maxD, G.outDegree[maxD]);
-    if ((sizeEdgeTy) && needWeight) {
+    if (sizeEdgeTy) {
       if (num_Edge % 2)
         if (fseek(fpin, 4, SEEK_CUR) != 0) // skip
           printf("Error when seeking\n");
       if (sizeof(uint) == sizeof(uint32_t)) {
-        read = fread(adjwgt, sizeof(uint), num_Edge,
+        read = fread(G.adjwgt, sizeof(uint), num_Edge,
                      fpin); // This is little-endian data
-        // readew = true;
+        readew = true;
         if (read < num_Edge)
           printf("Error: Partial read of edge data\n");
 
