@@ -4,12 +4,14 @@
 #include "app.cuh"
 #include <gflags/gflags.h>
 
-bool SSSPSingle();
+bool SSSP_single_gpu();
+bool SSSP_multi_gpu();
 namespace sssp
 {
 struct App
 {
-    static bool Single() { return SSSPSingle(); }
+    static bool Single() { return SSSP_single_gpu(); }
+    static bool Multi() { return SSSP_multi_gpu(); }
 };
 } // namespace sssp
 

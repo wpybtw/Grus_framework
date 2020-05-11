@@ -87,13 +87,13 @@ public:
     H_ERR(cudaMallocManaged(&G.xadj, (num_Node + 1) * sizeof(vtx_t)));
     H_ERR(cudaMallocManaged(&G.adjncy, num_Edge * sizeof(vtx_t)));
     mem_used += (num_Node + 1) * sizeof(vtx_t) + num_Edge * sizeof(vtx_t);
-    G.xadj_d = G.xadj;
-    G.adjncy_d = G.adjncy;
+    // G.xadj_d = G.xadj;
+    // G.adjncy_d = G.adjncy;
     G.adjwgt = nullptr;
     if (needWeight) {
       H_ERR(cudaMallocManaged(&G.adjwgt, num_Edge * sizeof(weight_t)));
       mem_used += num_Edge * sizeof(uint);
-      G.adjwgt_d = G.adjwgt;
+      // G.adjwgt_d = G.adjwgt;
     }
     G.weighted = true;
     if ((!sizeEdgeTy) && (needWeight)) {

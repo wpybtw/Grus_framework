@@ -1,5 +1,5 @@
-#ifndef __KERNEL_CUH
-#define __KERNEL_CUH
+#ifndef __CHUNK_KERNEL_CUH
+#define __CHUNK_KERNEL_CUH
 
 #include "common.cuh"
 #include "frontier.cuh"
@@ -14,30 +14,33 @@ namespace mgg {
 // __global__ void push_kernel(graph_t G, worklist::Worklist wl_c,
 //                             worklist::Worklist wl_n, job_t job);
 
+// todo: flag1 are a local copy, how about flag2
 // pull kernel on CSC
 template <typename updater_t, typename generator_t, typename pull_selector_t,
           typename job_t>
-__global__ void pull_kernel(graph_t<CSC> G, char *flag1, char *flag2,
-                            char *finished, job_t job) {
+__global__ void chunk_pull_kernel(graph_chunk<CSC> G, char *flag1, char *flag2,
+                                  job_t job) {
   int tid = TID_1D;
   vtx_t dst, level, laneid, src, wpid;
-  wpid = tid / 32;
+  wpid = tid / 32 + G.start_v;
   laneid = threadIdx.x % 32;
   updater_t updater;
   generator_t generator;
   pull_selector_t pull_selector;
-  if (wpid < job.num_Node) {
-    if (pull_selector(wpid, job)) {
-      dst = wpid;
-      for (vtx_t edge_id = G.xadj[dst] + laneid; edge_id < G.xadj[dst + 1];
-           edge_id += 32) {
-        src = G.adjncy[edge_id];
+  if (wpid < G.end_v) {
+    if (pull_selector(wpid)) {
+      dst = wpid; //blobal vtx id
+      // use chunk offset
+      for (vtx_t i = laneid; i < G.get_degree(dst); i += 32) {
+        // src = G.adjncy[i];
+        src = G.access_edge(dst, i);
         if (flag1[src])
-          generator(updater(src, dst, edge_id, job), flag2, dst, finished);
+          generator(updater(src, dst, edge_id, job), flag2, dst);
       }
     }
   }
 }
+// todo 
 // --------------------------push kernels--------------------
 template <typename graph_t, typename updater_t, typename generator_t,
           typename job_t>
@@ -51,9 +54,8 @@ __global__ void push_kernel(graph_t G, worklist::Worklist wl_c,
   generator_t generator;
   if (wpid < *wl_c.count) {
     src = wl_c.data[wpid];
-    for (vtx_t edge_id = G.xadj[src] + laneid; edge_id < G.xadj[src + 1];
-         edge_id += 32) {
-      dst = G.adjncy[edge_id];
+    for (vtx_t i = G.xadj[src] + laneid; i < G.xadj[src + 1]; i += 32) {
+      dst = G.adjncy[i];
       generator(updater(src, dst, edge_id, job), wl_n, dst);
     }
   }
@@ -61,8 +63,8 @@ __global__ void push_kernel(graph_t G, worklist::Worklist wl_c,
 // wl to flag
 template <typename graph_t, typename updater_t, typename generator_t,
           typename job_t>
-__global__ void push_kernel(const graph_t __restrict__ G,
-                            worklist::Worklist wl_c, char *flag, job_t job) {
+__global__ void push_kernel(graph_t G, worklist::Worklist wl_c, char *flag,
+                            job_t job) {
   int tid = TID_1D;
   vtx_t src, level, laneid, dst, wpid;
   wpid = tid / 32;
@@ -71,9 +73,8 @@ __global__ void push_kernel(const graph_t __restrict__ G,
   generator_t generator;
   if (wpid < *wl_c.count) {
     src = wl_c.data[wpid];
-    for (vtx_t edge_id = G.xadj[src] + laneid; edge_id < G.xadj[src + 1];
-         edge_id += 32) {
-      dst = G.adjncy[edge_id];
+    for (vtx_t i = G.xadj[src] + laneid; i < G.xadj[src + 1]; i += 32) {
+      dst = G.adjncy[i];
       generator(updater(src, dst, edge_id, job), flag, dst);
     }
   }
@@ -81,8 +82,7 @@ __global__ void push_kernel(const graph_t __restrict__ G,
 // flag to flag
 template <typename graph_t, typename updater_t, typename generator_t,
           typename job_t>
-__global__ void push_kernel(const graph_t __restrict__ G, char *flag1,
-                            char *flag2, job_t job) {
+__global__ void push_kernel(graph_t G, char *flag1, char *flag2, job_t job) {
   int tid = TID_1D;
   vtx_t src, level, laneid, dst, wpid;
   wpid = tid / 32;
@@ -92,9 +92,8 @@ __global__ void push_kernel(const graph_t __restrict__ G, char *flag1,
   if (wpid < job.num_Node) {
     if (flag1[wpid]) {
       src = wpid;
-      for (vtx_t edge_id = G.xadj[src] + laneid; edge_id < G.xadj[src + 1];
-           edge_id += 32) {
-        dst = G.adjncy[edge_id];
+      for (vtx_t i = G.xadj[src] + laneid; i < G.xadj[src + 1]; i += 32) {
+        dst = G.adjncy[i];
         generator(updater(src, dst, edge_id, job), flag2, dst);
       }
     }
@@ -113,25 +112,13 @@ __global__ void push_kernel(graph_t G, char *flag1, char *flag2, char *finished,
   if (wpid < job.num_Node) {
     if (flag1[wpid]) {
       src = wpid;
-      for (vtx_t edge_id = G.xadj[src] + laneid; edge_id < G.xadj[src + 1];
-           edge_id += 32) {
-        dst = G.adjncy[edge_id];
+      for (vtx_t i = G.xadj[src] + laneid; i < G.xadj[src + 1]; i += 32) {
+        dst = G.adjncy[i];
         generator(updater(src, dst, edge_id, job), flag2, dst, finished);
       }
     }
   }
 }
-template <typename updater_t, typename generator_t, typename pull_selector_t,
-          typename job_t>
-class kernel_pull {
-public:
-  void operator()(graph_t<CSC> G, frontier::Frontier<BITMAP> F, job_t job) {
-    pull_kernel<updater_t, generator_t, pull_selector_t,
-                job_t><<<F.numNode / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
-        G, F.flag1, F.flag2, F.finished_d, job);
-  }
-};
-
 template <typename graph_t, typename frontier_t, typename updater_t,
           typename generator_t, typename job_t>
 class kernel {

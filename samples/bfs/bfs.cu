@@ -11,7 +11,7 @@ using namespace mgg;
 DECLARE_int32(device);
 DECLARE_string(input);
 DECLARE_int32(src);
-
+DECLARE_bool(pull);
 namespace bfs {
 
 __global__ void BFSInit(uint *label, int nnodes, vtx_t source) {
@@ -27,7 +27,7 @@ public:
   uint *label;
   uint itr = 0;
   vtx_t num_Node;
-  weight_t *adjwgt=nullptr;
+  weight_t *adjwgt = nullptr;
   void operator()(vtx_t _num_Node, uint _src) {
     num_Node = _num_Node;
     src = _src;
@@ -68,10 +68,55 @@ struct generator {
     }
   }
 };
-
+struct pull_selector {
+  __forceinline__ __device__ bool operator()(vtx_t id, job_t job) {
+    if (job.label[id] == INFINIT) {
+      return true;
+    }
+    return false;
+  }
+};
 } // namespace bfs
-
-bool BFSSingle() {
+bool BFS_multi_gpu() {
+  // graph_t<CSC> G;
+  // graph_loader loader;
+  // loader.Load(G, false);
+}
+bool BFS_pull_single_gpu() {
+  cudaSetDevice(FLAGS_device);
+  H_ERR(cudaDeviceReset());
+  graph_t<CSR> G_csr;
+  graph_loader loader;
+  loader.Load(G_csr, false);
+  graph_t<CSC> G;
+  G.CSR2CSC(G_csr);
+  LOG("BFS pull single\n");
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
+  bfs::job_t job;
+  job(G.numNode, FLAGS_src);
+  frontier::Frontier<BITMAP> F; // BDF  BDF_AUTO BITMAP
+  F.Init(G.numNode, FLAGS_src, FLAGS_device, 1.0, false);
+  G.Set_Mem_Policy(&stream); // stream
+  cudaDeviceSynchronize();
+  Timer t;
+  t.Start();
+  kernel_pull<bfs::updater, bfs::generator, bfs::pull_selector, bfs::job_t> K;
+  while (!F.finish()) {
+    // cout << "itr " << job.itr << " wl_sz " << F.wl_sz << endl;
+    K(G, F, job);
+    cudaDeviceSynchronize();
+    // H_ERR(cudaStreamSynchronize(stream));
+    F.Next();
+    job.itr++;
+  }
+  cout << "itr " << job.itr << " in " << t.Finish() << endl;
+  return 0;
+}
+bool BFS_single_gpu() {
+  if (FLAGS_pull) {
+    return BFS_pull_single_gpu();
+  }
   cudaSetDevice(FLAGS_device);
   H_ERR(cudaDeviceReset());
   graph_t<CSR> G;
@@ -92,7 +137,7 @@ bool BFSSingle() {
   LOG("BFS single\n");
   cudaStream_t stream;
   cudaStreamCreate(&stream);
-  // G.Init(false); 
+  // G.Init(false);
   bfs::job_t job;
   job(G.numNode, FLAGS_src);
   frontier::Frontier<BDF_AUTO> F; // BDF  BDF_AUTO BITMAP

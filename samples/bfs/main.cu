@@ -4,12 +4,15 @@
 #include "app.cuh"
 #include <gflags/gflags.h>
 
-bool BFSSingle();
+bool BFS_single_gpu();
+bool BFS_multi_gpu();
+
 namespace bfs
 {
 struct App
 {
-    static bool Single() { return BFSSingle(); }
+    static bool Single() { return BFS_single_gpu(); }
+    static bool Multi() { return BFS_multi_gpu(); }
 };
 } // namespace bfs
 

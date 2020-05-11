@@ -70,8 +70,11 @@ struct generator {
 };
 
 } // namespace sssp
-
-bool SSSPSingle() {
+bool SSSP_multi_gpu() {
+  
+  
+}
+bool SSSP_single_gpu() {
   cudaSetDevice(FLAGS_device);
   H_ERR(cudaDeviceReset());
   graph_t<CSR> G(true);
