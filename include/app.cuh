@@ -15,6 +15,8 @@ DEFINE_bool(pull, false, "use pull-style execution");
 
 DEFINE_int32(device, 0, "GPU ID");
 DEFINE_string(input, "", "graph file");
+DEFINE_string(output, "", "output result file");
+
 DEFINE_int32(src, 0, "app src");
 DEFINE_int32(ngpu, 1, "GPU number, 1 for single-GPU version ");
 

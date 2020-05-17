@@ -30,6 +30,7 @@ DECLARE_int32(device);
 namespace mgg {
 
 template <typename T> void PrintResults(T *results, uint n);
+
 template <graphFmt fmt> class graph_chunk {
 public:
   uint64_t numNode;
@@ -44,15 +45,17 @@ public:
   bool weighted = false;
 
   graph_chunk(uint64_t _numNode, uint64_t _numEdge, uint64_t _node_in_chunk,
-              uint64_t _edge_in_chunk, vtx_t _start_v, uint _device_id,
-              vtx_t *_adjncy_global, weight_t *adjwgt_global = nullptr) {
+              uint64_t _edge_in_chunk, vtx_t _start_v, vtx_t _start_e,
+              uint _device_id, vtx_t *_adjncy_global,
+              weight_t *adjwgt_global = nullptr) {
     numNode = _numNode;
     numEdge = _numEdge;
     node_in_chunk = _node_in_chunk;
     edge_in_chunk = _edge_in_chunk;
     start_v = _start_v;
     end_v = start_v + _node_in_chunk;
-    start_e = xadj[start_v];
+    // start_e = xadj[start_v];
+    start_e = _start_e;
     end_e = start_e + _edge_in_chunk;
     adjncy_global = _adjncy_global;
     device_id = _device_id;
@@ -60,9 +63,9 @@ public:
       weighted = true;
     H_ERR(cudaMallocManaged(&xadj, (numNode + 1) *
                                        sizeof(vtx_t))); // change to all xadj
-    H_ERR(cudaMallocManaged(&adjncy, (edge_in_chunk + 1) * sizeof(vtx_t)));
+    H_ERR(cudaMallocManaged(&adjncy, edge_in_chunk * sizeof(vtx_t)));
     if (weighted)
-      H_ERR(cudaMallocManaged(&adjwgt, (edge_in_chunk + 1) * sizeof(weight_t)));
+      H_ERR(cudaMallocManaged(&adjwgt, edge_in_chunk * sizeof(weight_t)));
   }
   __forceinline__ __device__ vtx_t access_edge(vtx_t src, vtx_t offset) {
     if ((start_v <= src) && (src <= end_v)) // local
@@ -78,6 +81,20 @@ public:
   }
   __forceinline__ __device__ vtx_t get_degree(vtx_t id) {
     return xadj[id + 1] - xadj[id];
+  }
+  void distribute(int deviceId, cudaStream_t *stream) { // = NULL
+    // cudaSetDevice(deviceId);
+    // LOG("distributing %d\n", deviceId);
+    // print::PrintResults(xadj, 10);
+    // print::PrintResults(adjncy, 10);
+    // print::PrintResults(adjwgt, 10);
+    H_ERR(cudaMemPrefetchAsync(xadj, (numNode + 1) * sizeof(vtx_t), deviceId,
+                               nullptr));
+    H_ERR(cudaMemPrefetchAsync(adjncy, edge_in_chunk * sizeof(vtx_t), deviceId,
+                               *stream));
+    if (weighted)
+      H_ERR(cudaMemPrefetchAsync(adjwgt, edge_in_chunk * sizeof(weight_t),
+                                 deviceId, *stream));
   }
 };
 template <graphFmt fmt>
@@ -108,14 +125,22 @@ public:
   bool needWeight;
   uint64_t mem_used = 0;
   vector<graph_chunk<fmt>> chunks;
+  int numChunk;
 
+  void distribute_chunks(cudaStream_t *stream) { // = NULL
+    for (size_t i = 0; i < numChunk; i++) {
+      chunks[i].distribute(i, stream);
+    }
+  }
   void make_chunks(int num_gpu) {
+    numChunk = num_gpu;
     vtx_t num_vtx_per_chunk = numNode / num_gpu;
     for (size_t i = 0; i < num_gpu - 1; i++) {
       chunks.push_back(graph_chunk<fmt>(
           numNode, numEdge, num_vtx_per_chunk + 1,
           xadj[(i + 1) * num_vtx_per_chunk] - xadj[i * num_vtx_per_chunk],
-          i * num_vtx_per_chunk, i, adjncy, adjwgt));
+          i * num_vtx_per_chunk, xadj[i * num_vtx_per_chunk], i, adjncy,
+          adjwgt));
       // memcpy(chunks[i].xadj, &xadj[i * num_vtx_per_chunk],
       //        num_vtx_per_chunk + 1);
       memcpy(chunks[i].xadj, xadj, numNode + 1);
@@ -128,7 +153,8 @@ public:
     chunks.push_back(graph_chunk<fmt>(
         numNode, numEdge, num_vtx_per_chunk + numNode % num_gpu + 1,
         xadj[numNode] - xadj[(num_gpu - 1) * num_vtx_per_chunk],
-        (num_gpu - 1) * num_vtx_per_chunk, num_gpu - 1, adjncy, adjwgt));
+        (num_gpu - 1) * num_vtx_per_chunk,
+        xadj[(num_gpu - 1) * num_vtx_per_chunk], num_gpu - 1, adjncy, adjwgt));
     // memcpy(chunks[num_gpu - 1].xadj, &xadj[(num_gpu - 1) *
     // num_vtx_per_chunk],
     //        chunks[num_gpu - 1].node_in_chunk+1);

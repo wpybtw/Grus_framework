@@ -84,7 +84,7 @@ public:
   vtx_t wl_sz = 1;
   vtx_t *flag_sz;
   float active_perct = 0;
-  char *finished_d, finished=false;
+  char *finished_d, finished = false;
   // cudaStream_t &stream;
 
 public:
@@ -108,7 +108,7 @@ public:
       H_ERR(cudaMemsetAsync(&flag1[src], 1, sizeof(char), NULL));
     }
   }
-  void Next() {  // cudaStream_t &stream = NULL
+  void Next() { // cudaStream_t &stream = NULL
     // wl1.reset(); // flag2 active, flag1 dirty
     H_ERR(cudaMemcpy(&finished, finished_d, sizeof(char),
                      cudaMemcpyDeviceToHost));
@@ -159,6 +159,7 @@ public:
     if (_full) {
       current_wl = false;
       H_ERR(cudaMemsetAsync(flag1, 1, numNode * sizeof(char), NULL));
+      wl_sz = numNode;
     } else {
       H_ERR(cudaMemsetAsync(flag1, 0, numNode * sizeof(char), NULL));
       wl_c->add_item(src, 0);
@@ -179,7 +180,12 @@ public:
   __device__ vtx_t get_work_size() { return *wl_c->count; }
   __host__ vtx_t get_work_size_h() { return wl_c->get_sz(); }
   __device__ void add_work_item(vtx_t id) { wl_n->append(id); }
-  __host__ bool finish() { return get_work_size_h() == 0 ? true : false; }
+  __host__ bool finish() {
+    if (current_wl)
+      return get_work_size_h() == 0 ? true : false;
+    else
+      return wl_sz == 0 ? true : false;
+  }
 };
 template <> class Frontier<WL> {
   // private:

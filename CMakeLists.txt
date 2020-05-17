@@ -49,6 +49,18 @@ add_executable(sssp
 					     samples/sssp/main.cu)
 target_link_libraries(sssp ${EXTRA_LIBS})
 
+add_executable(pr 
+                src/worklist.cu
+               samples/pagerank/pr.cu
+					     samples/pagerank/main.cu)
+target_link_libraries(pr ${EXTRA_LIBS})
+
+add_executable(cc 
+                src/worklist.cu
+               samples/cc/cc.cu
+					     samples/cc/main.cu)
+target_link_libraries(cc ${EXTRA_LIBS})
+
 #add_executable(grus
 #    src/app.cu
 #    src/graph.cu

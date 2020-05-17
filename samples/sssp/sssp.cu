@@ -10,6 +10,7 @@ using namespace mgg;
 
 DECLARE_int32(device);
 DECLARE_string(input);
+DECLARE_string(output);
 DECLARE_int32(src);
 DECLARE_bool(pull);
 namespace sssp {
@@ -25,17 +26,25 @@ public:
   uint src;
   uint *label;
   uint itr = 0;
-  vtx_t num_Node;
+  vtx_t numNode;
   weight_t *adjwgt = nullptr;
-  void operator()(vtx_t _num_Node, uint _src, weight_t *_adjwgt) {
-    num_Node = _num_Node;
+  void operator()(vtx_t _numNode, uint _src, weight_t *_adjwgt) {
+    numNode = _numNode;
     src = _src;
     adjwgt = _adjwgt;
     init();
   }
   void init() {
-    H_ERR(cudaMalloc(&label, num_Node * sizeof(uint)));
-    SSSPInit<<<num_Node / BLOCK_SIZE + 1, BLOCK_SIZE>>>(label, num_Node, src);
+    H_ERR(cudaMallocManaged(&label, numNode * sizeof(uint)));
+    SSSPInit<<<numNode / BLOCK_SIZE + 1, BLOCK_SIZE>>>(label, numNode, src);
+  }
+  void prepare(){}
+    void clean() {
+  // __host__ __device__ ~job_t() {
+#if !defined(__CUDA_ARCH__)
+    if (!gflags::GetCommandLineFlagInfoOrDie("output").is_default)
+      print::SaveResults(FLAGS_output, label, numNode);
+#endif
   }
 };
 
@@ -156,5 +165,6 @@ bool SSSP_single_gpu() {
     job.itr++;
   }
   cout << "itr " << job.itr << " in " << t.Finish() << endl;
+  job.clean();
   return 0;
 }
