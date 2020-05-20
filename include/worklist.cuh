@@ -83,6 +83,8 @@ public:
   }
 };
 __global__ void flag_to_wl(Worklist wl, char *flag1, vtx_t size);
+__global__ void get_outdegree(Worklist wl, vtx_t *vtx_ptr, vtx_t *xadj,
+                              uint *outDegree, vtx_t size);
 } // namespace worklist
 } // namespace mgg
 #endif
