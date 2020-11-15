@@ -137,7 +137,7 @@ bool BFS_single_gpu() {
     return BFS_pull_single_gpu();
   }
   cudaSetDevice(FLAGS_device);
-  H_ERR(cudaDeviceReset());
+  // H_ERR(cudaDeviceReset());
   graph_t<CSR> G;
   graph_loader loader;
   loader.Load(G, false);
@@ -147,24 +147,27 @@ bool BFS_single_gpu() {
   // G.Init(false);
   bfs::job_t job;
   job(G.numNode, FLAGS_src);
-  frontier::Frontier<BDF_AUTO> F; // BDF  BDF_AUTO BITMAP
+  frontier::Frontier<BDF> F; // BDF  BDF_AUTO BITMAP WL
   F.Init(G.numNode, FLAGS_src, FLAGS_device, 1.0, false);
+  Timer totalT;
+  totalT.Start();
   G.Set_Mem_Policy(&stream); // stream
-  cudaDeviceSynchronize();
-  Timer t;
-  t.Start();
-  kernel<graph_t<CSR>, frontier::Frontier<BDF_AUTO>, bfs::updater,
+  cudaStreamSynchronize(stream);
+  kernel<graph_t<CSR>, frontier::Frontier<BDF>, bfs::updater,
          bfs::generator, bfs::job_t>
       K;
+  Timer t;
+  t.Start();
+
   while (!F.finish()) {
     // cout << "itr " << job.itr << " wl_sz " << F.wl_sz << endl;
     K(G, F, job);
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
     // H_ERR(cudaStreamSynchronize(stream));
     F.Next();
     job.itr++;
   }
-  cout << "itr " << job.itr << " in " << t.Finish() << endl;
+  cout << "itr " << job.itr << " in " << t.Finish() <<" totoal "<< totalT.Finish() << endl;
   job.clean();
   return 0;
 }

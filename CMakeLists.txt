@@ -4,6 +4,9 @@ cmake_minimum_required(VERSION 3.8)
 include(CheckLanguage)
 check_language(CUDA)
 
+#find_package(cub 1.1.4 REQUIRED)
+#add_subdirectory(deps/cub)
+
 set(CUDA_PATH "/usr/local/cuda")
 
 # GFlags
@@ -15,7 +18,7 @@ SET(CUDA_SEPARABLE_COMPILATION ON)
 set(BUILD_SHARED_LIBS OFF)
 
 ############## BUILD ##############
-set(EXTRA_LIBS gflags)
+set(EXTRA_LIBS gflags )
 
 #-Xcompiler -fopenmp
 
@@ -30,7 +33,7 @@ endif()
 
 set(CUDA_VERBOSE_BUILD ON)
 
-include_directories(include)
+include_directories(include deps/cub)
 
 if(NOT DEFINED CMAKE_CUDA_STANDARD)
     set(CMAKE_CUDA_STANDARD 11)
@@ -60,6 +63,13 @@ add_executable(cc
                samples/cc/cc.cu
 					     samples/cc/main.cu)
 target_link_libraries(cc ${EXTRA_LIBS})
+
+add_executable(bfs_2s 
+                src/worklist.cu
+                src/kernel.cu
+               samples/bfs_2s/bfs_2s.cu
+					     samples/bfs_2s/main.cu)
+target_link_libraries(bfs_2s ${EXTRA_LIBS})
 
 #add_executable(grus
 #    src/app.cu

@@ -12,7 +12,7 @@ namespace bfs_2s
 struct App
 {
     static bool Single() { return BFS_2S_single_gpu(); }
-    // static bool Multi() { return BFS_2S_multi_gpu(); }
+    static bool Multi() {return true;} //{ return BFS_2S_multi_gpu(); }
 };
 } // namespace bfs_2s
 

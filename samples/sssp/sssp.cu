@@ -147,13 +147,13 @@ bool SSSP_single_gpu() {
   // G.Init(false);
   sssp::job_t job;
   job(G.numNode, FLAGS_src, G.adjwgt);
-  frontier::Frontier<BDF_AUTO> F; // BDF  BDF_AUTO BITMAP
+  frontier::Frontier<BDF> F; // BDF  BDF_AUTO BITMAP
   F.Init(G.numNode, FLAGS_src, FLAGS_device, 1.0, false);
   G.Set_Mem_Policy(&stream); // stream
   cudaDeviceSynchronize();
   Timer t;
   t.Start();
-  kernel<graph_t<CSR>, frontier::Frontier<BDF_AUTO>, sssp::updater,
+  kernel<graph_t<CSR>, frontier::Frontier<BDF>, sssp::updater,
          sssp::generator, sssp::job_t>
       K;
   while (!F.finish()) {

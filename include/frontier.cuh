@@ -137,8 +137,10 @@ public:
   vtx_t *flag_sz;
   float active_perct = 0;
   float switch_th = 1.0;
+  float th1 = 0.00000005f, th2 = 0.9f;
   char *finished_d;
   bool current_wl = true;
+  frontierType current_f;
   // cudaStream_t &stream;
 
 public:
@@ -153,38 +155,88 @@ public:
     H_ERR(cudaMalloc(&flag1, numNode * sizeof(char)));
     H_ERR(cudaMalloc(&flag2, numNode * sizeof(char)));
     wl1.init(numNode * size_threshold);
+    wl2.init(numNode * size_threshold);
     wl_c = &wl1;
+    wl_n = &wl2;
     cudaMalloc(&flag_sz, sizeof(vtx_t));
     H_ERR(cudaMemsetAsync(flag2, 0, numNode * sizeof(char), NULL));
     if (_full) {
-      current_wl = false;
+      // current_wl = false;
+      current_f = BITMAP;
       H_ERR(cudaMemsetAsync(flag1, 1, numNode * sizeof(char), NULL));
       wl_sz = numNode;
     } else {
+      current_f = WL;
       H_ERR(cudaMemsetAsync(flag1, 0, numNode * sizeof(char), NULL));
       wl_c->add_item(src, 0);
     }
   }
-  void Next() {  // cudaStream_t &stream = NULL
-    wl1.reset(); // flag2 active, flag1 0
-    flag_to_wl<<<numNode / BLOCK_SIZE + 1, BLOCK_SIZE, 0, NULL>>>(wl1, flag2,
-                                                                  numNode);
-    wl_sz = wl1.get_sz();
-    // LOG("wl_sz %d\n",wl_sz);
-    std::swap(flag2, flag1);
-    H_ERR(cudaMemsetAsync(flag2, 0,
-                          numNode * sizeof(char))); // flag1 active, flag2 0
-    current_wl = switch_th * numNode > wl_c->get_sz() ? true : false;
+  void get_active() {
+    switch (current_f) {
+    case WL:
+      wl_c->reset();
+      H_ERR(cudaMemsetAsync(flag1, 0, numNode * sizeof(char)));
+      wl_sz = wl_n->get_sz();
+      std::swap(wl_c, wl_n);
+      break;
+    case BITMAP:
+      // todo how to check bitmap value? always convert to wl??
+      H_ERR(cudaMemsetAsync(flag1, 0, numNode * sizeof(char)));
+      wl_c->reset();
+      flag_to_wl<<<numNode / BLOCK_SIZE + 1, BLOCK_SIZE, 0, NULL>>>(
+          *wl_n, flag2, numNode);
+      wl_sz = wl_n->get_sz();
+      std::swap(flag2, flag1);
+      std::swap(wl_c, wl_n);
+      // todo, flag1 wl_c are both avaiable currently
+      break;
+    case BDF:
+      wl_c->reset();
+      H_ERR(cudaMemsetAsync(flag1, 0, numNode * sizeof(char)));
+      flag_to_wl<<<numNode / BLOCK_SIZE + 1, BLOCK_SIZE, 0, NULL>>>(
+          *wl_n, flag2, numNode);
+      wl_sz = wl_n->get_sz();
+      std::swap(flag2, flag1);
+      std::swap(wl_c, wl_n);
+      // todo, flag1 wl_c are both avaiable currently
+      break;
+    default:
+      break;
+    }
+    if (wl_sz < numNode * th1) {
+      // LOG("WL\n");
+      current_f = WL;
+    } else if (wl_sz > numNode * th2) {
+      // LOG("BITMAP\n");
+      current_f = BITMAP;
+    } else {
+      // LOG("BDF\n");
+      current_f = BDF;
+    }
   }
-  __device__ vtx_t get_work_item(vtx_t id) { return wl_c->data[id]; }
-  __device__ vtx_t get_work_size() { return *wl_c->count; }
-  __host__ vtx_t get_work_size_h() { return wl_c->get_sz(); }
-  __device__ void add_work_item(vtx_t id) { wl_n->append(id); }
+  void Next() { // cudaStream_t &stream = NULL
+    // get_active();
+    // wl1.reset(); // flag2 active, flag1 0
+    // flag_to_wl<<<numNode / BLOCK_SIZE + 1, BLOCK_SIZE, 0, NULL>>>(wl1, flag2,
+    //                                                               numNode);
+    // wl_sz = wl1.get_sz();
+    // // LOG("wl_sz %d\n",wl_sz);
+    // std::swap(flag2, flag1);
+    // H_ERR(cudaMemsetAsync(flag2, 0,
+    //                       numNode * sizeof(char))); // flag1 active, flag2 0
+    // current_wl = switch_th * numNode > wl_c->get_sz() ? true : false;
+    get_active();
+  }
+  // __device__ vtx_t get_work_item(vtx_t id) { return wl_c->data[id]; }
+  // __device__ vtx_t get_work_size() { return *wl_c->count; }
+  __host__ vtx_t get_work_size_h() { return wl_sz; }
+  // __device__ void add_work_item(vtx_t id) { wl_n->append(id); }
   __host__ bool finish() {
-    if (current_wl)
-      return get_work_size_h() == 0 ? true : false;
-    else
-      return wl_sz == 0 ? true : false;
+    // if (current_wl)
+    //   return get_work_size_h() == 0 ? true : false;
+    // else
+    //   return wl_sz == 0 ? true : false;
+    return wl_sz == 0 ? true : false;
   }
 };
 template <> class Frontier<WL> {
@@ -220,9 +272,10 @@ public:
     }
   }
   void Next() {
-    Worklist *tmp = wl_c;
-    wl_c = wl_n;
-    wl_n = tmp;
+    // Worklist *tmp = wl_c;
+    // wl_c = wl_n;
+    // wl_n = tmp;
+    std::swap(wl_c, wl_n);
     wl_n->reset();
   }
   __device__ vtx_t get_work_item(vtx_t id) { return wl_c->data[id]; }

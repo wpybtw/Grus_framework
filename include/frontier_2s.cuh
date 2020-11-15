@@ -64,18 +64,36 @@ public:
       wl_remote->add_item(src, 0);
     }
   }
-  void Next() {         // cudaStream_t &stream = NULL
-    wl_remote->reset(); // flag2 active, flag1 0
+  void Next() { // cudaStream_t &stream = NULL
+
     // flag_to_wl<<<numNode / BLOCK_SIZE + 1, BLOCK_SIZE, 0, NULL>>>(wl1, flag2,
     //                                                               numNode);
+    // std::swap(wl_remote,wl_local)
+    uint flag_num, *flag_num_ptr;
+    cudaMalloc(&flag_num_ptr, sizeof(uint));
+    worklist::get_flag_num<<<numNode / BLOCK_SIZE + 1, BLOCK_SIZE, 0, NULL>>>(
+        flag2, numNode, flag_num_ptr);
+    H_ERR(cudaMemcpy(&flag_num, flag_num_ptr, sizeof(vtx_t),
+                     cudaMemcpyDeviceToHost));
+    // LOG("active vtx from flag %u \n", flag_num);
+
+    // previous remote become local
+    wl_to_flag<<<numNode / BLOCK_SIZE + 1, BLOCK_SIZE, 0, NULL>>>(
+        *wl_remote, flag_local, numNode);
+    wl_remote->reset(); // flag2 active, flag1 0
+    wl_local->reset();
+    // flag_local is too expensive??
     flag_to_wl_remote_local<<<numNode / BLOCK_SIZE + 1, BLOCK_SIZE, 0, NULL>>>(
-        wl1, wl2, flag_local, flag2, numNode);
+        *wl_remote, *wl_local, flag_local, flag2, numNode);
     H_ERR(cudaMemsetAsync(flag_local, 0,
                           numNode * sizeof(char))); // reset flag_local
     wl_sz_remote = wl_remote->get_sz();
     wl_sz_local = wl_local->get_sz();
     wl_sz = wl_sz_remote + wl_sz_local;
     H_ERR(cudaMemsetAsync(flag2, 0, numNode * sizeof(char))); // flag2 0
+    LOG("wl_sz_remote %d wl_sz_local %d total %d \n", wl_sz_remote, wl_sz_local,
+        wl_sz);
+    // print::PrintResults(wl_remote->data, std::min(50, (int)wl_sz_remote));
   }
   // __device__ vtx_t get_work_item(vtx_t id) { return wl_remote->data[id]; }
 
@@ -87,7 +105,7 @@ public:
   __host__ vtx_t get_work_size_totoal_h() { return wl_sz; }
 
   // __device__ void add_work_item(vtx_t id) { wl_n->append(id); }
-  __host__ bool finish() { return get_work_size_h() == 0 ? true : false; }
+  __host__ bool finish() { return wl_sz == 0 ? true : false; }
 };
 // template <> class Frontier_2S<BITMAP> {
 //   // private:

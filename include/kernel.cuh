@@ -183,19 +183,24 @@ class kernel<graph_t, frontier::Frontier<BDF_AUTO>, updater_t, generator_t,
 public:
   void operator()(graph_t G, frontier::Frontier<BDF_AUTO> F, job_t job) {
     job.prepare();
-    if (F.current_wl)
+    switch (F.current_f) {
+    case WL:
+      push_kernel<
+          graph_t, updater_t, generator_t,
+          job_t><<<F.get_work_size_h() / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
+          G, *F.wl_c, *F.wl_n, job);
+    case BITMAP:
+      push_kernel<graph_t, updater_t, generator_t,
+                  job_t><<<F.numNode / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
+          G, F.flag1, F.flag2, job);
+    case BDF:
       push_kernel<
           graph_t, updater_t, generator_t,
           job_t><<<F.get_work_size_h() / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
           G, *F.wl_c, F.flag2, job);
-    else
-      push_kernel<graph_t, updater_t, generator_t,
-                  job_t><<<F.numNode / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
-          G, F.flag1, F.flag2, job);
+    }
   }
 };
-
-
 
 } // namespace mgg
 

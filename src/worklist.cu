@@ -2,7 +2,30 @@
 
 namespace mgg {
 
+
+
 namespace worklist {
+
+__global__ void get_flag_num(char *flag1, vtx_t size, vtx_t *num)
+{
+  size_t id = blockDim.x * blockIdx.x + threadIdx.x;
+  if (id < size)
+  {
+    if (flag1[id])
+      atomicAdd(num, 1);
+  }
+}
+__global__ void compute_lookup_buffer(vtx_t *vtx,
+                                      vtx_t *vtx_ptr, vtx_t *xadj,
+                                      uint *lookup_buffer, uint *outDegree,
+                                      vtx_t size) {
+  size_t tid = blockDim.x * blockIdx.x + threadIdx.x;
+  if (tid < size) {
+    // vtx_t id=wl.data[tid];
+    lookup_buffer[vtx[tid]] = tid;
+    outDegree[tid] = xadj[vtx[tid] + 1] - xadj[vtx[tid]];
+  }
+}
 
 __global__ void worklist_reset(Worklist wl) { wl.reset_d(); }
 
@@ -68,6 +91,13 @@ __global__ void flag_to_wl(Worklist wl, char *flag1, vtx_t size) {
       wl.warp_append(tid);
   }
 }
+__global__ void wl_to_flag(Worklist wl, char *flag1, vtx_t size) {
+  size_t tid = blockDim.x * blockIdx.x + threadIdx.x;
+  if (tid < size) {
+    vtx_t src = wl.data[tid];
+    flag1[src] = 1;
+  }
+}
 // after that, update flag_local
 __global__ void flag_to_wl_remote_local(Worklist wl_remote, Worklist wl_local,
                                         char *flag_local, char *flag_active,
@@ -82,13 +112,7 @@ __global__ void flag_to_wl_remote_local(Worklist wl_remote, Worklist wl_local,
     }
   }
 }
-__global__ void get_outdegree(Worklist wl, vtx_t *vtx_ptr, vtx_t *xadj,
-                              uint *outDegree, vtx_t size) {
-  size_t tid = blockDim.x * blockIdx.x + threadIdx.x;
-  if (tid < size) {
-    outDegree[tid] = xadj[tid + 1] - xadj[tid];
-  }
-}
+
 // __global__ void compute_offset(Worklist wl, vtx_t *vtx_ptr, vtx_t *xadj,
 //                                vtx_t size) {
 //   size_t tid = blockDim.x * blockIdx.x + threadIdx.x;

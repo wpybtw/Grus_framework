@@ -4,27 +4,54 @@
 #include "common.cuh"
 #include "frontier_2s.cuh"
 #include "graph.cuh"
+#include "subgraph.cuh"
 #include "worklist.cuh"
 #include <cuda.h>
 #include <cuda_runtime.h>
 namespace mgg {
 
 // wl to flag
-template <typename graph_t, typename updater_t, typename generator_t,
+// template <typename subgraph_t, typename updater_t, typename generator_t,
+//           typename job_t>
+// __global__ void push_kernel_subgraph_reverse(subgraph_t G,
+//                                              worklist::Worklist wl_c,
+//                                              char *flag, job_t job) {
+//   int tid = TID_1D;
+//   vtx_t src, level, laneid, dst, wpid;
+//   wpid = tid / 32;
+//   laneid = threadIdx.x % 32;
+//   updater_t updater;
+//   generator_t generator;
+//   if (wpid < *wl_c.count) {
+//     src = wl_c.data[wpid];
+//     vtx_t local_id=G.get_vtx_from_id(src);
+//     for (size_t offset = laneid; offset < G.get_vtx_degree[wpid];
+//          offset += 32) {
+//       dst = G.get_edge_dst(wpid, offset);
+//       edge_id = G.get_edge_id(wpid, offset);
+//       generator(updater(src, dst, edge_id, job), flag, dst);
+//     }
+//   }
+// }
+template <typename subgraph_t, typename updater_t, typename generator_t,
           typename job_t>
-__global__ void push_kernel_2s(const graph_t __restrict__ G,
-                               worklist::Worklist wl_c, char *flag, job_t job) {
+__global__ void push_kernel_subgraph(subgraph_t G, worklist::Worklist wl_c,
+                                     char *flag, job_t job) {
   int tid = TID_1D;
-  vtx_t src, level, laneid, dst, wpid;
+  vtx_t src, level, laneid, dst, wpid, edge_id, local_id;
   wpid = tid / 32;
   laneid = threadIdx.x % 32;
   updater_t updater;
   generator_t generator;
   if (wpid < *wl_c.count) {
     src = wl_c.data[wpid];
-    for (vtx_t edge_id = G.xadj[src] + laneid; edge_id < G.xadj[src + 1];
-         edge_id += 32) {
-      dst = G.adjncy[edge_id];
+    local_id = G.get_vtx_from_id(src);
+    // if (tid == 0)
+    //   printf("tid 0 process %d with local_id %d \n", src,local_id);
+    for (size_t offset = laneid; offset < G.get_vtx_degree(wpid);
+         offset += 32) {
+      edge_id = G.get_edge_id(local_id, offset);
+      dst = G.get_edge_dst(local_id, offset);
       generator(updater(src, dst, edge_id, job), flag, dst);
     }
   }
@@ -34,7 +61,8 @@ template <typename graph_t, typename subgraph_t, typename frontier_t,
           typename updater_t, typename generator_t, typename job_t>
 class kernel_2s {
 public:
-  void operator()(graph_t G, frontier_t F, job_t job) {}
+  void operator()(graph_t G, subgraph_t SG1, subgraph_t SG2, frontier_t F,
+                  job_t job) {}
 };
 
 template <typename graph_t, typename updater_t, typename generator_t,
@@ -45,14 +73,21 @@ public:
   void operator()(graph_t G, Subgraph<NORMAL> SG1, Subgraph<NORMAL> SG2,
                   frontier::Frontier_2S<BDF> F, job_t job) {
     job.prepare();
+    LOG("-----------------------------------------------\n");
+    // LOG("F.get_work_size_local_h() sz %d\n ", F.get_work_size_local_h());
+    // LOG("F.get_work_size_remote_h() sz %d\n ", F.get_work_size_remote_h());
     // process previous subgraph
-    push_kernel_2s<graph_t, updater_t, generator_t, job_t><<<
+    push_kernel_subgraph<Subgraph<NORMAL>, updater_t, generator_t, job_t><<<
         F.get_work_size_local_h() / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
         SG1, *F.wl_local, F.flag2, job);
-    // transfer
-    push_kernel_2s<graph_t, updater_t, generator_t, job_t><<<
+    SG1.clean(); // read-only copy will be better??
+    // build and transfer
+    SG2.build(G, *F.wl_remote);
+    push_kernel_subgraph<Subgraph<NORMAL>, updater_t, generator_t, job_t><<<
         F.get_work_size_remote_h() / (BLOCK_SIZE >> 5) + 1, BLOCK_SIZE>>>(
         SG2, *F.wl_remote, F.flag2, job);
+    // LOG("SG1 numNode%d\n", SG1.numNode);
+    // LOG("SG2 numNode%d\n", SG2.numNode);
   }
 };
 // template <typename graph_t, typename updater_t, typename generator_t,

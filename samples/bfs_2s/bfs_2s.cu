@@ -107,21 +107,30 @@ bool BFS_2S_single_gpu() {
   F.Init(G.numNode, FLAGS_src, FLAGS_device, 1.0, false);
   // G.Set_Mem_Policy(&stream); // stream
   // cudaDeviceSynchronize(); //todo
+  Subgraph<NORMAL> *SG_local, *SG_remote;
   Subgraph<NORMAL> SG1, SG2;
-  SG1.reserve(G.numNode);
-  SG2.reserve(G.numNode);
+  SG1.reserve(G.numNode, G.numEdge);
+  SG2.reserve(G.numNode, G.numEdge);
+  SG_local = &SG1;
+  SG_remote = &SG2;
   Timer t;
   t.Start();
-  kernel_2s<graph_t<CSR>, frontier::Frontier_2S<BDF>, bfs_2s::updater,
-         bfs_2s::generator, bfs_2s::job_t>
+  kernel_2s<graph_t<CSR>, Subgraph<NORMAL>, frontier::Frontier_2S<BDF>,
+            bfs_2s::updater, bfs_2s::generator, bfs_2s::job_t>
       K;
+  // SG_remote->build(G, *F.wl_remote);
   while (!F.finish()) {
     // cout << "itr " << job.itr << " wl_sz " << F.wl_sz << endl;
-    K(G, F, job);
+    K(G, *SG_local, *SG_remote, F, job);
+    // LOG("SG_local numNode%d\n", SG_local->numNode);
+    // LOG("SG_remote numNode%d\n", SG_remote->numNode);
     cudaDeviceSynchronize();
+    std::swap(SG_local, SG_remote);
     // H_ERR(cudaStreamSynchronize(stream));
     F.Next();
     job.itr++;
+    // if (job.itr > 1)
+    //   break;
   }
   cout << "itr " << job.itr << " in " << t.Finish() << endl;
   job.clean();
